@@ -108,7 +108,7 @@
 
 /* Custom tooltip styles */
 .tooltip {
-  @apply absolute z-10 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0 tooltip-arrow;
+  @apply absolute z-10 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0;
   transition: opacity 0.3s;
 }
 
