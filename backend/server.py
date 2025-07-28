@@ -464,6 +464,116 @@ async def get_chat_history(session_id: str):
         logger.error(f"Chat history error: {str(e)}")
         raise HTTPException(status_code=500, detail="Chat history fetch failed")
 
+@app.post("/api/optimize-portfolio", response_model=OptimizationResult)
+async def optimize_portfolio(request: OptimizationRequest):
+    """Optimize portfolio allocation using Modern Portfolio Theory"""
+    try:
+        result = optimizer.optimize_portfolio(
+            symbols=request.symbols,
+            method=request.optimization_method,
+            risk_tolerance=request.risk_tolerance
+        )
+        
+        # Generate efficient frontier if requested
+        if request.optimization_method == "sharpe":
+            efficient_frontier = optimizer.generate_efficient_frontier(request.symbols)
+            result["efficient_frontier"] = efficient_frontier
+        
+        return OptimizationResult(**result)
+        
+    except Exception as e:
+        logger.error(f"Portfolio optimization error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Optimization failed: {str(e)}")
+
+@app.get("/api/efficient-frontier/{symbols}")
+async def get_efficient_frontier(symbols: str):
+    """Generate efficient frontier for given symbols"""
+    try:
+        symbol_list = symbols.split(",")
+        if len(symbol_list) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 symbols required")
+        
+        frontier_data = optimizer.generate_efficient_frontier(symbol_list, num_portfolios=20)
+        
+        return {
+            "status": "success",
+            "data": {
+                "symbols": symbol_list,
+                "efficient_frontier": frontier_data
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Efficient frontier error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Efficient frontier calculation failed: {str(e)}")
+
+@app.get("/api/portfolio-analysis/{symbols}")
+async def analyze_portfolio(symbols: str, weights: str = None):
+    """Analyze portfolio performance and risk metrics"""
+    try:
+        symbol_list = symbols.split(",")
+        
+        if weights:
+            weight_list = [float(w) for w in weights.split(",")]
+            if len(weight_list) != len(symbol_list):
+                raise HTTPException(status_code=400, detail="Number of weights must match number of symbols")
+            if abs(sum(weight_list) - 1.0) > 0.01:
+                raise HTTPException(status_code=400, detail="Weights must sum to 1.0")
+        else:
+            # Equal weights if not provided
+            weight_list = [1.0 / len(symbol_list)] * len(symbol_list)
+        
+        # Get historical data and calculate metrics
+        price_data = optimizer.get_historical_data(symbol_list)
+        mean_returns, cov_matrix = optimizer.calculate_returns_and_cov(price_data)
+        
+        weights_array = np.array(weight_list)
+        portfolio_return, portfolio_volatility, sharpe_ratio = optimizer.portfolio_stats(
+            weights_array, mean_returns, cov_matrix
+        )
+        
+        # Calculate individual asset metrics
+        asset_metrics = []
+        for i, symbol in enumerate(symbol_list):
+            asset_return = mean_returns[symbol]
+            asset_volatility = np.sqrt(cov_matrix.loc[symbol, symbol])
+            asset_sharpe = (asset_return - optimizer.risk_free_rate) / asset_volatility
+            
+            asset_metrics.append({
+                "symbol": symbol,
+                "weight": weight_list[i],
+                "expected_return": float(asset_return),
+                "volatility": float(asset_volatility),
+                "sharpe_ratio": float(asset_sharpe)
+            })
+        
+        return {
+            "status": "success",
+            "data": {
+                "portfolio_metrics": {
+                    "expected_return": float(portfolio_return),
+                    "volatility": float(portfolio_volatility),
+                    "sharpe_ratio": float(sharpe_ratio),
+                    "risk_free_rate": optimizer.risk_free_rate
+                },
+                "asset_metrics": asset_metrics,
+                "correlation_matrix": cov_matrix.corr().to_dict()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Portfolio analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Portfolio analysis failed: {str(e)}")
+
+@app.get("/api/market-data/enhanced")
+async def get_enhanced_market_data():
+    """Get enhanced market data with additional metrics"""
+    try:
+        return {"status": "success", "data": ENHANCED_MARKET_DATA}
+    except Exception as e:
+        logger.error(f"Enhanced market data error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Enhanced market data service error")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
