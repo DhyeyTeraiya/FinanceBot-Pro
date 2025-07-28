@@ -375,6 +375,95 @@ async def get_market_data():
         logger.error(f"Market data error: {str(e)}")
         raise HTTPException(status_code=500, detail="Market data service error")
 
+@app.get("/api/market-data/enhanced")
+async def get_enhanced_market_data():
+    try:
+        return {"status": "success", "data": ENHANCED_MARKET_DATA}
+    except Exception as e:
+        logger.error(f"Enhanced market data error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Enhanced market data service error")
+
+@app.post("/api/optimize-portfolio", response_model=OptimizationResult)
+async def optimize_portfolio(request: OptimizationRequest):
+    try:
+        result = optimizer.optimize_portfolio(
+            symbols=request.symbols,
+            method=request.optimization_method,
+            risk_tolerance=request.risk_tolerance
+        )
+        
+        # Calculate investment allocation in dollars
+        dollar_allocation = {}
+        for symbol, weight in result["allocation"].items():
+            dollar_allocation[symbol] = weight * request.investment_amount
+        
+        # Add efficient frontier if requested
+        efficient_frontier = optimizer.generate_efficient_frontier(request.symbols)
+        
+        return OptimizationResult(
+            symbols=result["symbols"],
+            weights=result["weights"],
+            expected_return=result["expected_return"],
+            volatility=result["volatility"],
+            sharpe_ratio=result["sharpe_ratio"],
+            allocation=dollar_allocation,
+            efficient_frontier=efficient_frontier
+        )
+        
+    except Exception as e:
+        logger.error(f"Portfolio optimization error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Portfolio optimization failed: {str(e)}")
+
+@app.get("/api/efficient-frontier/{symbols}")
+async def get_efficient_frontier(symbols: str):
+    try:
+        symbol_list = symbols.split(",")
+        if len(symbol_list) < 2:
+            raise HTTPException(status_code=400, detail="At least 2 symbols required for optimization")
+        
+        efficient_frontier = optimizer.generate_efficient_frontier(symbol_list)
+        return {"status": "success", "data": efficient_frontier}
+        
+    except Exception as e:
+        logger.error(f"Efficient frontier error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Efficient frontier calculation failed: {str(e)}")
+
+@app.get("/api/portfolio-analysis/{symbols}")
+async def analyze_portfolio(symbols: str):
+    try:
+        symbol_list = symbols.split(",")
+        
+        # Get historical data for analysis
+        price_data = optimizer.get_historical_data(symbol_list)
+        mean_returns, cov_matrix = optimizer.calculate_returns_and_cov(price_data)
+        
+        # Calculate correlation matrix
+        returns = price_data.pct_change().dropna()
+        correlation_matrix = returns.corr()
+        
+        # Individual asset metrics
+        asset_metrics = {}
+        for symbol in symbol_list:
+            if symbol in mean_returns.index:
+                asset_metrics[symbol] = {
+                    "expected_return": float(mean_returns[symbol]),
+                    "volatility": float(np.sqrt(cov_matrix.loc[symbol, symbol])),
+                    "sharpe_ratio": float((mean_returns[symbol] - optimizer.risk_free_rate) / np.sqrt(cov_matrix.loc[symbol, symbol]))
+                }
+        
+        return {
+            "status": "success",
+            "data": {
+                "asset_metrics": asset_metrics,
+                "correlation_matrix": correlation_matrix.to_dict(),
+                "covariance_matrix": cov_matrix.to_dict()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Portfolio analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Portfolio analysis failed: {str(e)}")
+
 @app.post("/api/user/profile")
 async def create_user_profile(profile: UserProfile):
     try:
