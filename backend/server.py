@@ -33,7 +33,7 @@ db = client.financebot_pro
 # Initialize OpenAI client for NVIDIA API
 openai_client = openai.OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key="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"
 )
 
 # Pydantic models
