@@ -1,14 +1,19 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import openai
 import os
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
+import numpy as np
+import pandas as pd
+from scipy.optimize import minimize
+import yfinance as yf
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -59,17 +64,234 @@ class Portfolio(BaseModel):
     total_value: float = 0
     performance: dict = {}
 
-# Mock market data for demonstration
-MOCK_MARKET_DATA = {
-    "AAPL": {"price": 195.30, "change": "+2.45", "change_percent": "+1.27%"},
-    "GOOGL": {"price": 2875.20, "change": "-15.30", "change_percent": "-0.53%"},
-    "MSFT": {"price": 415.75, "change": "+3.20", "change_percent": "+0.78%"},
-    "TSLA": {"price": 242.65, "change": "+8.40", "change_percent": "+3.58%"},
-    "NVDA": {"price": 925.40, "change": "+12.80", "change_percent": "+1.40%"},
-    "AMZN": {"price": 3485.75, "change": "-8.25", "change_percent": "-0.24%"},
-    "META": {"price": 485.20, "change": "+6.10", "change_percent": "+1.27%"},
-    "BTC": {"price": 67420.30, "change": "+1240.80", "change_percent": "+1.87%"},
-    "ETH": {"price": 3825.40, "change": "+95.20", "change_percent": "+2.55%"}
+class OptimizationRequest(BaseModel):
+    symbols: List[str]
+    investment_amount: float
+    risk_tolerance: str = "moderate"  # conservative, moderate, aggressive
+    optimization_method: str = "sharpe"  # sharpe, min_volatility, max_return
+
+class OptimizationResult(BaseModel):
+    symbols: List[str]
+    weights: List[float]
+    expected_return: float
+    volatility: float
+    sharpe_ratio: float
+    allocation: Dict[str, float]
+    efficient_frontier: Optional[List[Dict]] = None
+
+# Portfolio Optimization Engine
+class PortfolioOptimizer:
+    def __init__(self):
+        self.risk_free_rate = 0.02  # 2% risk-free rate
+    
+    def get_historical_data(self, symbols: List[str], period: str = "1y") -> pd.DataFrame:
+        """Fetch historical price data for given symbols"""
+        try:
+            data = yf.download(symbols, period=period, progress=False)['Adj Close']
+            if len(symbols) == 1:
+                data = data.to_frame(symbols[0])
+            return data.dropna()
+        except Exception as e:
+            logger.error(f"Error fetching data: {str(e)}")
+            # Return mock data if yfinance fails
+            dates = pd.date_range(end=datetime.now(), periods=252, freq='D')
+            np.random.seed(42)
+            mock_data = {}
+            for symbol in symbols:
+                returns = np.random.normal(0.001, 0.02, 252)
+                prices = [100]
+                for ret in returns[1:]:
+                    prices.append(prices[-1] * (1 + ret))
+                mock_data[symbol] = prices
+            return pd.DataFrame(mock_data, index=dates)
+    
+    def calculate_returns_and_cov(self, price_data: pd.DataFrame):
+        """Calculate expected returns and covariance matrix"""
+        returns = price_data.pct_change().dropna()
+        mean_returns = returns.mean() * 252  # Annualized returns
+        cov_matrix = returns.cov() * 252  # Annualized covariance
+        return mean_returns, cov_matrix
+    
+    def portfolio_stats(self, weights: np.ndarray, mean_returns: pd.Series, cov_matrix: pd.DataFrame):
+        """Calculate portfolio statistics"""
+        portfolio_return = np.sum(mean_returns * weights)
+        portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+        sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_volatility
+        return portfolio_return, portfolio_volatility, sharpe_ratio
+    
+    def negative_sharpe_ratio(self, weights: np.ndarray, mean_returns: pd.Series, cov_matrix: pd.DataFrame):
+        """Objective function to minimize (negative Sharpe ratio)"""
+        _, _, sharpe = self.portfolio_stats(weights, mean_returns, cov_matrix)
+        return -sharpe
+    
+    def portfolio_volatility(self, weights: np.ndarray, mean_returns: pd.Series, cov_matrix: pd.DataFrame):
+        """Calculate portfolio volatility"""
+        _, volatility, _ = self.portfolio_stats(weights, mean_returns, cov_matrix)
+        return volatility
+    
+    def negative_portfolio_return(self, weights: np.ndarray, mean_returns: pd.Series, cov_matrix: pd.DataFrame):
+        """Negative portfolio return for maximization"""
+        portfolio_return, _, _ = self.portfolio_stats(weights, mean_returns, cov_matrix)
+        return -portfolio_return
+    
+    def optimize_portfolio(self, symbols: List[str], method: str = "sharpe", risk_tolerance: str = "moderate"):
+        """Main optimization function"""
+        try:
+            # Get historical data
+            price_data = self.get_historical_data(symbols)
+            mean_returns, cov_matrix = self.calculate_returns_and_cov(price_data)
+            
+            n_assets = len(symbols)
+            
+            # Constraints and bounds
+            constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})  # weights sum to 1
+            
+            # Risk tolerance bounds
+            if risk_tolerance == "conservative":
+                bounds = tuple((0.05, 0.4) for _ in range(n_assets))  # Max 40% in any asset
+            elif risk_tolerance == "moderate":
+                bounds = tuple((0.02, 0.6) for _ in range(n_assets))  # Max 60% in any asset
+            else:  # aggressive
+                bounds = tuple((0.01, 0.8) for _ in range(n_assets))  # Max 80% in any asset
+            
+            # Initial guess (equal weights)
+            initial_guess = np.array([1/n_assets] * n_assets)
+            
+            # Choose objective function
+            if method == "sharpe":
+                objective = self.negative_sharpe_ratio
+            elif method == "min_volatility":
+                objective = self.portfolio_volatility
+            else:  # max_return
+                objective = self.negative_portfolio_return
+            
+            # Optimize
+            result = minimize(
+                objective,
+                initial_guess,
+                args=(mean_returns, cov_matrix),
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints
+            )
+            
+            if result.success:
+                optimal_weights = result.x
+                portfolio_return, portfolio_volatility, sharpe_ratio = self.portfolio_stats(
+                    optimal_weights, mean_returns, cov_matrix
+                )
+                
+                # Create allocation dictionary
+                allocation = {symbol: float(weight) for symbol, weight in zip(symbols, optimal_weights)}
+                
+                return {
+                    "symbols": symbols,
+                    "weights": optimal_weights.tolist(),
+                    "expected_return": float(portfolio_return),
+                    "volatility": float(portfolio_volatility),
+                    "sharpe_ratio": float(sharpe_ratio),
+                    "allocation": allocation
+                }
+            else:
+                raise Exception("Optimization failed to converge")
+                
+        except Exception as e:
+            logger.error(f"Portfolio optimization error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Optimization error: {str(e)}")
+    
+    def generate_efficient_frontier(self, symbols: List[str], num_portfolios: int = 10):
+        """Generate efficient frontier data points"""
+        try:
+            price_data = self.get_historical_data(symbols)
+            mean_returns, cov_matrix = self.calculate_returns_and_cov(price_data)
+            
+            n_assets = len(symbols)
+            constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+            bounds = tuple((0.01, 0.7) for _ in range(n_assets))
+            initial_guess = np.array([1/n_assets] * n_assets)
+            
+            # Find minimum volatility portfolio
+            min_vol_result = minimize(
+                self.portfolio_volatility,
+                initial_guess,
+                args=(mean_returns, cov_matrix),
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints
+            )
+            
+            min_vol_return, min_vol_volatility, _ = self.portfolio_stats(
+                min_vol_result.x, mean_returns, cov_matrix
+            )
+            
+            # Find maximum return portfolio
+            max_ret_result = minimize(
+                self.negative_portfolio_return,
+                initial_guess,
+                args=(mean_returns, cov_matrix),
+                method='SLSQP',
+                bounds=bounds,
+                constraints=constraints
+            )
+            
+            max_ret_return, max_ret_volatility, _ = self.portfolio_stats(
+                max_ret_result.x, mean_returns, cov_matrix
+            )
+            
+            # Generate target returns between min and max
+            target_returns = np.linspace(min_vol_return, max_ret_return, num_portfolios)
+            efficient_frontier = []
+            
+            for target_return in target_returns:
+                # Add return constraint
+                constraints_with_return = [
+                    {'type': 'eq', 'fun': lambda x: np.sum(x) - 1},
+                    {'type': 'eq', 'fun': lambda x: np.sum(mean_returns * x) - target_return}
+                ]
+                
+                result = minimize(
+                    self.portfolio_volatility,
+                    initial_guess,
+                    args=(mean_returns, cov_matrix),
+                    method='SLSQP',
+                    bounds=bounds,
+                    constraints=constraints_with_return
+                )
+                
+                if result.success:
+                    portfolio_return, portfolio_volatility, sharpe_ratio = self.portfolio_stats(
+                        result.x, mean_returns, cov_matrix
+                    )
+                    
+                    efficient_frontier.append({
+                        "return": float(portfolio_return),
+                        "volatility": float(portfolio_volatility),
+                        "sharpe_ratio": float(sharpe_ratio)
+                    })
+            
+            return efficient_frontier
+            
+        except Exception as e:
+            logger.error(f"Efficient frontier error: {str(e)}")
+            return []
+
+# Initialize optimizer
+optimizer = PortfolioOptimizer()
+
+# Enhanced mock market data with more realistic financial data
+ENHANCED_MARKET_DATA = {
+    "AAPL": {"price": 195.30, "change": "+2.45", "change_percent": "+1.27%", "beta": 1.29, "pe_ratio": 32.4},
+    "GOOGL": {"price": 2875.20, "change": "-15.30", "change_percent": "-0.53%", "beta": 1.03, "pe_ratio": 28.1},
+    "MSFT": {"price": 415.75, "change": "+3.20", "change_percent": "+0.78%", "beta": 0.91, "pe_ratio": 35.2},
+    "TSLA": {"price": 242.65, "change": "+8.40", "change_percent": "+3.58%", "beta": 2.09, "pe_ratio": 76.8},
+    "NVDA": {"price": 925.40, "change": "+12.80", "change_percent": "+1.40%", "beta": 1.65, "pe_ratio": 45.3},
+    "AMZN": {"price": 3485.75, "change": "-8.25", "change_percent": "-0.24%", "beta": 1.33, "pe_ratio": 52.7},
+    "META": {"price": 485.20, "change": "+6.10", "change_percent": "+1.27%", "beta": 1.18, "pe_ratio": 24.9},
+    "SPY": {"price": 478.32, "change": "+1.85", "change_percent": "+0.39%", "beta": 1.00, "pe_ratio": 26.2},
+    "QQQ": {"price": 425.88, "change": "+2.12", "change_percent": "+0.50%", "beta": 1.15, "pe_ratio": 30.1},
+    "VTI": {"price": 285.94, "change": "+1.44", "change_percent": "+0.51%", "beta": 1.02, "pe_ratio": 25.8},
+    "BTC": {"price": 67420.30, "change": "+1240.80", "change_percent": "+1.87%", "beta": 3.50, "pe_ratio": None},
+    "ETH": {"price": 3825.40, "change": "+95.20", "change_percent": "+2.55%", "beta": 2.80, "pe_ratio": None}
 }
 
 @app.get("/")
@@ -148,7 +370,7 @@ Always provide practical, actionable advice tailored to the user's situation. Be
 @app.get("/api/market-data")
 async def get_market_data():
     try:
-        return {"status": "success", "data": MOCK_MARKET_DATA}
+        return {"status": "success", "data": ENHANCED_MARKET_DATA}
     except Exception as e:
         logger.error(f"Market data error: {str(e)}")
         raise HTTPException(status_code=500, detail="Market data service error")
