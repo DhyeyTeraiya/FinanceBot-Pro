@@ -464,7 +464,7 @@ async def analyze_portfolio(symbols: str):
         logger.error(f"Portfolio analysis error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Portfolio analysis failed: {str(e)}")
 
-@app.get("/api/user/profile")
+@app.post("/api/user/profile")
 async def create_user_profile(profile: UserProfile):
     try:
         profile_dict = profile.dict()
