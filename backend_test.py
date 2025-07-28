@@ -290,6 +290,282 @@ class FinanceBotTester:
             self.log_result("Session Management", False, f"Error: {str(e)}")
         return False
     
+    def test_enhanced_market_data(self):
+        """Test enhanced market data endpoint with beta values and P/E ratios"""
+        try:
+            response = requests.get(f"{self.base_url}/api/market-data/enhanced", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success" and "data" in data:
+                    market_data = data["data"]
+                    # Check if we have expected stocks with enhanced data
+                    test_symbols = ["AAPL", "GOOGL", "MSFT", "TSLA"]
+                    enhanced_data_found = 0
+                    
+                    for symbol in test_symbols:
+                        if symbol in market_data:
+                            stock_data = market_data[symbol]
+                            if "beta" in stock_data and "pe_ratio" in stock_data:
+                                enhanced_data_found += 1
+                    
+                    if enhanced_data_found >= 3:
+                        self.log_result("Enhanced Market Data", True, f"Found enhanced data for {enhanced_data_found} symbols with beta and P/E ratios")
+                        return True
+                    else:
+                        self.log_result("Enhanced Market Data", False, f"Only found enhanced data for {enhanced_data_found} symbols")
+                else:
+                    self.log_result("Enhanced Market Data", False, f"Invalid response format: {data}")
+            else:
+                self.log_result("Enhanced Market Data", False, f"Status code: {response.status_code}")
+        except Exception as e:
+            self.log_result("Enhanced Market Data", False, f"Error: {str(e)}")
+        return False
+    
+    def test_portfolio_optimization_sharpe(self):
+        """Test portfolio optimization with Sharpe ratio maximization"""
+        try:
+            optimization_data = {
+                "symbols": ["AAPL", "GOOGL", "MSFT", "TSLA"],
+                "investment_amount": 100000,
+                "risk_tolerance": "moderate",
+                "optimization_method": "sharpe"
+            }
+            
+            print("Testing portfolio optimization (Sharpe ratio)...")
+            response = requests.post(
+                f"{self.base_url}/api/optimize-portfolio",
+                json=optimization_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["symbols", "weights", "expected_return", "volatility", "sharpe_ratio", "allocation"]
+                
+                if all(field in data for field in required_fields):
+                    # Validate mathematical properties
+                    weights = data["weights"]
+                    allocation = data["allocation"]
+                    
+                    # Check weights sum to approximately 1
+                    weights_sum = sum(weights)
+                    if abs(weights_sum - 1.0) < 0.01:
+                        # Check allocation matches investment amount
+                        total_allocation = sum(allocation.values())
+                        if abs(total_allocation - 100000) < 100:
+                            # Check Sharpe ratio is reasonable
+                            sharpe_ratio = data["sharpe_ratio"]
+                            if -2 <= sharpe_ratio <= 5:  # Reasonable range
+                                self.log_result("Portfolio Optimization (Sharpe)", True, 
+                                    f"Sharpe ratio: {sharpe_ratio:.3f}, weights sum: {weights_sum:.3f}")
+                                return True
+                            else:
+                                self.log_result("Portfolio Optimization (Sharpe)", False, 
+                                    f"Unreasonable Sharpe ratio: {sharpe_ratio}")
+                        else:
+                            self.log_result("Portfolio Optimization (Sharpe)", False, 
+                                f"Allocation mismatch: {total_allocation} vs 100000")
+                    else:
+                        self.log_result("Portfolio Optimization (Sharpe)", False, 
+                            f"Weights don't sum to 1: {weights_sum}")
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_result("Portfolio Optimization (Sharpe)", False, 
+                        f"Missing fields: {missing_fields}")
+            else:
+                self.log_result("Portfolio Optimization (Sharpe)", False, 
+                    f"Status code: {response.status_code}, Response: {response.text}")
+        except Exception as e:
+            self.log_result("Portfolio Optimization (Sharpe)", False, f"Error: {str(e)}")
+        return False
+    
+    def test_portfolio_optimization_min_volatility(self):
+        """Test portfolio optimization with minimum volatility"""
+        try:
+            optimization_data = {
+                "symbols": ["AAPL", "GOOGL", "MSFT", "TSLA"],
+                "investment_amount": 100000,
+                "risk_tolerance": "conservative",
+                "optimization_method": "min_volatility"
+            }
+            
+            print("Testing portfolio optimization (Min Volatility)...")
+            response = requests.post(
+                f"{self.base_url}/api/optimize-portfolio",
+                json=optimization_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "volatility" in data and "weights" in data:
+                    volatility = data["volatility"]
+                    weights = data["weights"]
+                    
+                    # Check conservative risk tolerance constraints (max 40% per asset)
+                    max_weight = max(weights)
+                    if max_weight <= 0.41:  # Allow small tolerance
+                        self.log_result("Portfolio Optimization (Min Vol)", True, 
+                            f"Volatility: {volatility:.3f}, max weight: {max_weight:.3f}")
+                        return True
+                    else:
+                        self.log_result("Portfolio Optimization (Min Vol)", False, 
+                            f"Conservative constraint violated: max weight {max_weight:.3f} > 0.4")
+                else:
+                    self.log_result("Portfolio Optimization (Min Vol)", False, 
+                        f"Missing volatility or weights in response")
+            else:
+                self.log_result("Portfolio Optimization (Min Vol)", False, 
+                    f"Status code: {response.status_code}")
+        except Exception as e:
+            self.log_result("Portfolio Optimization (Min Vol)", False, f"Error: {str(e)}")
+        return False
+    
+    def test_portfolio_optimization_max_return(self):
+        """Test portfolio optimization with maximum return"""
+        try:
+            optimization_data = {
+                "symbols": ["AAPL", "GOOGL", "MSFT", "TSLA"],
+                "investment_amount": 100000,
+                "risk_tolerance": "aggressive",
+                "optimization_method": "max_return"
+            }
+            
+            print("Testing portfolio optimization (Max Return)...")
+            response = requests.post(
+                f"{self.base_url}/api/optimize-portfolio",
+                json=optimization_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "expected_return" in data and "weights" in data:
+                    expected_return = data["expected_return"]
+                    weights = data["weights"]
+                    
+                    # Check aggressive risk tolerance allows higher concentrations (up to 80%)
+                    max_weight = max(weights)
+                    if max_weight <= 0.81:  # Allow small tolerance
+                        self.log_result("Portfolio Optimization (Max Return)", True, 
+                            f"Expected return: {expected_return:.3f}, max weight: {max_weight:.3f}")
+                        return True
+                    else:
+                        self.log_result("Portfolio Optimization (Max Return)", False, 
+                            f"Aggressive constraint violated: max weight {max_weight:.3f} > 0.8")
+                else:
+                    self.log_result("Portfolio Optimization (Max Return)", False, 
+                        f"Missing expected_return or weights in response")
+            else:
+                self.log_result("Portfolio Optimization (Max Return)", False, 
+                    f"Status code: {response.status_code}")
+        except Exception as e:
+            self.log_result("Portfolio Optimization (Max Return)", False, f"Error: {str(e)}")
+        return False
+    
+    def test_efficient_frontier(self):
+        """Test efficient frontier generation"""
+        try:
+            symbols = "AAPL,GOOGL,MSFT,TSLA"
+            response = requests.get(f"{self.base_url}/api/efficient-frontier/{symbols}", timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success" and "data" in data:
+                    frontier_data = data["data"]
+                    
+                    if len(frontier_data) >= 5:  # Should have multiple data points
+                        # Check if data points have required fields
+                        required_fields = ["return", "volatility", "sharpe_ratio"]
+                        valid_points = 0
+                        
+                        for point in frontier_data:
+                            if all(field in point for field in required_fields):
+                                # Check if values are reasonable
+                                if (-0.5 <= point["return"] <= 2.0 and 
+                                    0.01 <= point["volatility"] <= 1.0 and
+                                    -3 <= point["sharpe_ratio"] <= 5):
+                                    valid_points += 1
+                        
+                        if valid_points >= len(frontier_data) * 0.8:  # 80% valid points
+                            self.log_result("Efficient Frontier", True, 
+                                f"Generated {len(frontier_data)} points, {valid_points} valid")
+                            return True
+                        else:
+                            self.log_result("Efficient Frontier", False, 
+                                f"Only {valid_points}/{len(frontier_data)} valid points")
+                    else:
+                        self.log_result("Efficient Frontier", False, 
+                            f"Too few data points: {len(frontier_data)}")
+                else:
+                    self.log_result("Efficient Frontier", False, f"Invalid response format: {data}")
+            else:
+                self.log_result("Efficient Frontier", False, f"Status code: {response.status_code}")
+        except Exception as e:
+            self.log_result("Efficient Frontier", False, f"Error: {str(e)}")
+        return False
+    
+    def test_portfolio_analysis(self):
+        """Test portfolio analysis with correlation and covariance matrices"""
+        try:
+            symbols = "AAPL,GOOGL,MSFT,TSLA"
+            response = requests.get(f"{self.base_url}/api/portfolio-analysis/{symbols}", timeout=30)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success" and "data" in data:
+                    analysis_data = data["data"]
+                    required_sections = ["asset_metrics", "correlation_matrix", "covariance_matrix"]
+                    
+                    if all(section in analysis_data for section in required_sections):
+                        asset_metrics = analysis_data["asset_metrics"]
+                        correlation_matrix = analysis_data["correlation_matrix"]
+                        
+                        # Check asset metrics
+                        test_symbols = ["AAPL", "GOOGL", "MSFT", "TSLA"]
+                        valid_metrics = 0
+                        
+                        for symbol in test_symbols:
+                            if symbol in asset_metrics:
+                                metrics = asset_metrics[symbol]
+                                if ("expected_return" in metrics and 
+                                    "volatility" in metrics and 
+                                    "sharpe_ratio" in metrics):
+                                    # Check if values are reasonable
+                                    if (-0.5 <= metrics["expected_return"] <= 2.0 and
+                                        0.01 <= metrics["volatility"] <= 1.0):
+                                        valid_metrics += 1
+                        
+                        # Check correlation matrix structure
+                        correlation_valid = True
+                        for symbol1 in test_symbols:
+                            if symbol1 in correlation_matrix:
+                                for symbol2 in test_symbols:
+                                    if symbol2 in correlation_matrix[symbol1]:
+                                        corr_value = correlation_matrix[symbol1][symbol2]
+                                        if not (-1.1 <= corr_value <= 1.1):  # Allow small numerical errors
+                                            correlation_valid = False
+                                            break
+                        
+                        if valid_metrics >= 3 and correlation_valid:
+                            self.log_result("Portfolio Analysis", True, 
+                                f"Valid metrics for {valid_metrics} assets, correlation matrix valid")
+                            return True
+                        else:
+                            self.log_result("Portfolio Analysis", False, 
+                                f"Invalid metrics ({valid_metrics}) or correlation matrix")
+                    else:
+                        missing_sections = [s for s in required_sections if s not in analysis_data]
+                        self.log_result("Portfolio Analysis", False, 
+                            f"Missing sections: {missing_sections}")
+                else:
+                    self.log_result("Portfolio Analysis", False, f"Invalid response format: {data}")
+            else:
+                self.log_result("Portfolio Analysis", False, f"Status code: {response.status_code}")
+        except Exception as e:
+            self.log_result("Portfolio Analysis", False, f"Error: {str(e)}")
+        return False
+    
     def run_all_tests(self):
         """Run all backend tests"""
         print("=" * 60)
