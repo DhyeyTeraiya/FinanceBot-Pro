@@ -1,38 +1,152 @@
-.App {
-    text-align: center;
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
 }
 
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
-.App-link {
-    color: #61dafb;
+/* Chat animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.chat-message {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Gradient background for hero section */
+.gradient-bg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Custom button hover effects */
+.btn-primary {
+  @apply bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 transform hover:bg-blue-600 hover:scale-105 active:scale-95;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:bg-gray-200;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+}
+
+/* Market data animations */
+.market-item {
+  @apply transition-all duration-200 hover:bg-gray-100;
+}
+
+/* Portfolio value highlight */
+.portfolio-value {
+  @apply text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-blue-600;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  border: 2px solid #f3f4f6;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Chat input focus effect */
+.chat-input:focus {
+  @apply ring-2 ring-blue-500 ring-opacity-50 border-blue-500;
+}
+
+/* Responsive design enhancements */
+@media (max-width: 768px) {
+  .mobile-padding {
+    @apply px-4 py-2;
+  }
+  
+  .mobile-text {
+    @apply text-sm;
+  }
+}
+
+/* Financial chart colors */
+.chart-positive {
+  @apply text-green-600;
+}
+
+.chart-negative {
+  @apply text-red-600;
+}
+
+.chart-neutral {
+  @apply text-gray-600;
+}
+
+/* Custom tooltip styles */
+.tooltip {
+  @apply absolute z-10 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0 tooltip-arrow;
+  transition: opacity 0.3s;
+}
+
+.tooltip.show {
+  @apply opacity-100;
+}
+
+/* Professional financial app styling */
+.financial-card {
+  @apply bg-white rounded-xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300;
+}
+
+.metric-highlight {
+  @apply font-bold text-2xl;
+}
+
+.metric-label {
+  @apply text-sm text-gray-600 uppercase tracking-wide font-medium;
+}
+
+/* AI Advisor specific styles */
+.ai-message {
+  @apply max-w-4xl;
+}
+
+.user-message {
+  @apply max-w-2xl;
+}
+
+/* Status indicators */
+.status-online {
+  @apply w-3 h-3 bg-green-400 rounded-full;
+}
+
+.status-busy {
+  @apply w-3 h-3 bg-yellow-400 rounded-full;
+}
+
+.status-offline {
+  @apply w-3 h-3 bg-red-400 rounded-full;
 }
