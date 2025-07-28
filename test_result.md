@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Test the FinanceBot Pro backend API thoroughly: API Health Check, AI Chat Functionality with NVIDIA Palmyra model, Market Data, Portfolio Management, User Profile, and Database Operations"
+user_problem_statement: "Test the updated FinanceBot Pro with the new Llama 3.3 Nemotron Super 49B model: API Health Check, New AI Model Test with advanced reasoning capabilities, Session Management, and Response Quality verification"
 
 backend:
   - task: "API Health Check"
