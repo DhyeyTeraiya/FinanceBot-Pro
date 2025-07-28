@@ -269,7 +269,7 @@ What would you like to discuss about your financial goals today?`,
           </div>
           <div>
             <h2 className="text-xl font-bold text-gray-800">AI Financial Advisor</h2>
-            <p className="text-sm text-gray-600">Powered by Palmyra Finance 70B Model</p>
+            <p className="text-sm text-gray-600">Powered by Llama 3.3 Nemotron Super 49B</p>
           </div>
         </div>
       </div>
