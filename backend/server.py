@@ -332,21 +332,62 @@ Always provide practical, actionable advice tailored to the user's situation. Be
         # Add current message
         messages.append({"role": "user", "content": chat_request.message})
         
-        # Call NVIDIA API with Palmyra financial model and streaming
-        completion = openai_client.chat.completions.create(
-            model="writer/palmyra-fin-70b-32k",
-            messages=messages,
-            temperature=0.2,
-            top_p=0.7,
-            max_tokens=1024,
-            stream=True
-        )
+        # Implement exponential backoff for rate limiting
+        max_retries = 3
+        base_delay = 2.0
         
-        # Collect streaming response
-        response_text = ""
-        for chunk in completion:
-            if chunk.choices[0].delta.content is not None:
-                response_text += chunk.choices[0].delta.content
+        for attempt in range(max_retries + 1):
+            try:
+                # Call NVIDIA API with Palmyra financial model and streaming
+                completion = openai_client.chat.completions.create(
+                    model="writer/palmyra-fin-70b-32k",
+                    messages=messages,
+                    temperature=0.2,
+                    top_p=0.7,
+                    max_tokens=1024,
+                    stream=True
+                )
+                
+                # Collect streaming response
+                response_text = ""
+                for chunk in completion:
+                    if chunk.choices[0].delta.content is not None:
+                        response_text += chunk.choices[0].delta.content
+                
+                # If we got a response, break out of retry loop
+                if response_text.strip():
+                    break
+                else:
+                    raise Exception("Empty response from AI model")
+                    
+            except Exception as api_error:
+                error_str = str(api_error)
+                logger.warning(f"Chat API attempt {attempt + 1} failed: {error_str}")
+                
+                # Check if it's a rate limiting error
+                if "429" in error_str or "Too Many Requests" in error_str or "rate" in error_str.lower():
+                    if attempt < max_retries:
+                        # Exponential backoff with jitter
+                        delay = base_delay * (2 ** attempt) + np.random.uniform(0, 1)
+                        logger.info(f"Rate limited. Retrying in {delay:.2f} seconds...")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Max retries exceeded for rate limiting
+                        response_text = "I'm experiencing high demand right now. Please try again in a few moments. In the meantime, you can explore the dashboard or ask me about general investment strategies."
+                        break
+                else:
+                    # Non-rate-limiting error, don't retry
+                    if attempt == 0:  # First attempt, try once more after short delay
+                        await asyncio.sleep(1)
+                        continue
+                    else:
+                        response_text = "I apologize, but I'm having trouble processing your request right now. Please try again, and I'll do my best to help with your financial questions."
+                        break
+        
+        # Ensure we have some response
+        if not response_text or not response_text.strip():
+            response_text = "Hello! I'm FinanceBot Pro, your AI financial advisor. How can I help you with your investment goals today?"
         
         # Save conversation to database
         await db.chat_history.insert_many([
@@ -368,7 +409,30 @@ Always provide practical, actionable advice tailored to the user's situation. Be
         
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Chat service error: {str(e)}")
+        # Provide user-friendly error message instead of raising HTTP exception
+        fallback_response = "I'm experiencing some technical difficulties. Please try your question again, and I'll help you with your financial planning needs."
+        
+        # Still try to save the user message to maintain session continuity
+        try:
+            session_id = chat_request.session_id or str(uuid.uuid4())
+            await db.chat_history.insert_many([
+                {
+                    "session_id": session_id,
+                    "role": "user",
+                    "content": chat_request.message,
+                    "timestamp": datetime.utcnow()
+                },
+                {
+                    "session_id": session_id,
+                    "role": "assistant", 
+                    "content": fallback_response,
+                    "timestamp": datetime.utcnow()
+                }
+            ])
+        except:
+            pass  # Don't fail if database save fails
+            
+        return ChatResponse(response=fallback_response, session_id=session_id or str(uuid.uuid4()))
 
 @app.get("/api/market-data")
 async def get_market_data():
