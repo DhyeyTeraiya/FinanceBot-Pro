@@ -164,6 +164,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "NVIDIA Palmyra model integration working excellently. AI responds with comprehensive financial advice (2965+ characters) containing relevant financial keywords. Chat endpoint /api/chat functioning properly."
+      - working: true
+        agent: "testing"
+        comment: "PALMYRA MODEL VERIFIED: Fixed missing httpx dependency issue. Basic 'hi' message test PASSED - no longer responds with 'think>' but gives proper greeting (352 chars). Financial question test PASSED with comprehensive 3527-character response containing 7 financial keywords (invest, portfolio, diversif, risk, return, etf, index). API integration confirmed working with writer/palmyra-fin-70b-32k model. Rate limiting (429 errors) encountered during rapid testing - this is expected NVIDIA API behavior, not a code issue."
 
   - task: "Chat History Persistence"
     implemented: true
