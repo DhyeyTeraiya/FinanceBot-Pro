@@ -240,6 +240,127 @@ backend:
         agent: "testing"
         comment: "ADDITIONAL FIX: Found and resolved missing 'httpx>=0.24.0' dependency required by openai package. Backend now starts without errors and all AI functionality working properly."
 
+frontend:
+  - task: "Homepage/Dashboard Loading"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify dashboard loads with portfolio overview showing $8,727.25 total value and market data display"
+
+  - task: "Navigation Between Views"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify navigation between Dashboard and AI Advisor views works properly"
+
+  - task: "Market Data Display"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify market overview section displays stock prices (AAPL, GOOGL, MSFT, etc.)"
+
+  - task: "Portfolio Overview Display"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify portfolio overview shows correct total value and holdings"
+
+  - task: "Quick Action Cards"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify Investment Ideas, Portfolio Analysis, and Risk Assessment cards display properly"
+
+  - task: "Chatbot Functionality - Critical Fix"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "CRITICAL TEST: Need to verify the specific user-reported issue - send 'hi' message and confirm it responds properly (NOT 'think>'). Backend has been fixed with NVIDIA Palmyra model."
+
+  - task: "Chat Interface and UX"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify message input, send button, loading states, message timestamps and formatting"
+
+  - task: "Chat Session Management"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify session management works and messages persist in conversation"
+
+  - task: "Responsive Design and Mobile Compatibility"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify responsive design works on mobile and desktop viewports"
+
+  - task: "Error Handling and Loading States"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/App.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "testing"
+        comment: "Ready for testing - need to verify error handling if backend is unreachable and loading animations work properly"
+
 metadata:
   created_by: "testing_agent"
   version: "1.0"
@@ -247,7 +368,14 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Chatbot Functionality - Critical Fix"
+    - "Homepage/Dashboard Loading"
+    - "Navigation Between Views"
+    - "Market Data Display"
+    - "Portfolio Overview Display"
+    - "Chat Interface and UX"
+    - "Chat Session Management"
   stuck_tasks: []
   test_all: true
   test_priority: "high_first"
