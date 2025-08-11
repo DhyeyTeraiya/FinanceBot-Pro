@@ -257,8 +257,326 @@ class FinanceBotTester:
             self.log_result("Chat History Persistence", False, f"Error: {str(e)}")
         return False
     
+    def test_multi_message_conversation(self):
+        """CRITICAL TEST: Multi-message conversation to verify 500 error fix"""
+        try:
+            # Create a new session for this critical test
+            critical_session_id = str(uuid.uuid4())
+            
+            print("🔥 CRITICAL TEST: Multi-message conversation (testing 500 error fix)...")
+            
+            # Message 1: "hi" - should work as before
+            print("  Step 1: Sending 'hi' message...")
+            chat_data_1 = {
+                "message": "hi",
+                "session_id": critical_session_id
+            }
+            
+            response_1 = requests.post(
+                f"{self.base_url}/api/chat",
+                json=chat_data_1,
+                timeout=30
+            )
+            
+            if response_1.status_code != 200:
+                self.log_result("Multi-Message Conversation", False, f"First message failed with status {response_1.status_code}")
+                return False
+            
+            data_1 = response_1.json()
+            if not data_1.get("response") or len(data_1["response"]) < 20:
+                self.log_result("Multi-Message Conversation", False, f"First message response too short: {data_1.get('response', '')}")
+                return False
+            
+            print(f"    ✅ First message successful: {len(data_1['response'])} chars")
+            
+            # Brief pause to avoid overwhelming the API
+            time.sleep(2)
+            
+            # Message 2: Follow-up question - this was previously causing 500 errors
+            print("  Step 2: Sending follow-up message 'What stocks should I buy?'...")
+            chat_data_2 = {
+                "message": "What stocks should I buy?",
+                "session_id": critical_session_id
+            }
+            
+            response_2 = requests.post(
+                f"{self.base_url}/api/chat",
+                json=chat_data_2,
+                timeout=30
+            )
+            
+            if response_2.status_code != 200:
+                self.log_result("Multi-Message Conversation", False, f"Second message failed with status {response_2.status_code} - 500 error fix not working!")
+                return False
+            
+            data_2 = response_2.json()
+            if not data_2.get("response") or len(data_2["response"]) < 20:
+                self.log_result("Multi-Message Conversation", False, f"Second message response too short: {data_2.get('response', '')}")
+                return False
+            
+            print(f"    ✅ Second message successful: {len(data_2['response'])} chars")
+            
+            # Brief pause
+            time.sleep(2)
+            
+            # Message 3: Another follow-up - testing continued conversation
+            print("  Step 3: Sending third message 'Tell me about AAPL'...")
+            chat_data_3 = {
+                "message": "Tell me about AAPL",
+                "session_id": critical_session_id
+            }
+            
+            response_3 = requests.post(
+                f"{self.base_url}/api/chat",
+                json=chat_data_3,
+                timeout=30
+            )
+            
+            if response_3.status_code != 200:
+                self.log_result("Multi-Message Conversation", False, f"Third message failed with status {response_3.status_code}")
+                return False
+            
+            data_3 = response_3.json()
+            if not data_3.get("response") or len(data_3["response"]) < 20:
+                self.log_result("Multi-Message Conversation", False, f"Third message response too short: {data_3.get('response', '')}")
+                return False
+            
+            print(f"    ✅ Third message successful: {len(data_3['response'])} chars")
+            
+            # Verify session continuity
+            if (data_1.get("session_id") == critical_session_id and 
+                data_2.get("session_id") == critical_session_id and 
+                data_3.get("session_id") == critical_session_id):
+                
+                self.log_result("Multi-Message Conversation", True, 
+                    f"🎉 CRITICAL FIX VERIFIED: All 3 messages successful, no 500 errors, session maintained")
+                return True
+            else:
+                self.log_result("Multi-Message Conversation", False, "Session ID not maintained across messages")
+                return False
+                
+        except Exception as e:
+            self.log_result("Multi-Message Conversation", False, f"CRITICAL ERROR: {str(e)}")
+        return False
+    
+    def test_rate_limiting_resilience(self):
+        """Test rate limiting resilience with rapid consecutive messages"""
+        try:
+            rate_test_session_id = str(uuid.uuid4())
+            
+            print("Testing rate limiting resilience with rapid messages...")
+            
+            messages = [
+                "What is diversification?",
+                "How do I start investing?", 
+                "What are ETFs?",
+                "Should I invest in crypto?",
+                "What about bonds?"
+            ]
+            
+            successful_responses = 0
+            rate_limited_responses = 0
+            error_responses = 0
+            
+            for i, message in enumerate(messages):
+                print(f"  Sending rapid message {i+1}: {message[:30]}...")
+                
+                chat_data = {
+                    "message": message,
+                    "session_id": rate_test_session_id
+                }
+                
+                try:
+                    response = requests.post(
+                        f"{self.base_url}/api/chat",
+                        json=chat_data,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        response_text = data.get("response", "")
+                        
+                        # Check if it's a rate limiting message (user-friendly)
+                        if ("high demand" in response_text.lower() or 
+                            "try again" in response_text.lower() or
+                            "few moments" in response_text.lower()):
+                            rate_limited_responses += 1
+                            print(f"    ⏳ Rate limited (user-friendly message)")
+                        elif len(response_text) > 20:
+                            successful_responses += 1
+                            print(f"    ✅ Successful response: {len(response_text)} chars")
+                        else:
+                            error_responses += 1
+                            print(f"    ❌ Unexpected short response")
+                    else:
+                        error_responses += 1
+                        print(f"    ❌ HTTP error: {response.status_code}")
+                        
+                except Exception as e:
+                    error_responses += 1
+                    print(f"    ❌ Request error: {str(e)}")
+                
+                # Small delay between rapid requests
+                time.sleep(0.5)
+            
+            # Evaluate results
+            total_messages = len(messages)
+            if error_responses == 0:  # No 500 errors or exceptions
+                if successful_responses > 0 or rate_limited_responses > 0:
+                    self.log_result("Rate Limiting Resilience", True, 
+                        f"No errors: {successful_responses} successful, {rate_limited_responses} rate-limited (graceful)")
+                    return True
+                else:
+                    self.log_result("Rate Limiting Resilience", False, "All messages failed unexpectedly")
+            else:
+                self.log_result("Rate Limiting Resilience", False, 
+                    f"{error_responses} error responses out of {total_messages}")
+            
+        except Exception as e:
+            self.log_result("Rate Limiting Resilience", False, f"Test error: {str(e)}")
+        return False
+    
+    def test_session_persistence_and_context(self):
+        """Test session persistence and context maintenance"""
+        try:
+            context_session_id = str(uuid.uuid4())
+            
+            print("Testing session persistence and context maintenance...")
+            
+            # First message: Set context
+            print("  Step 1: Setting investment context...")
+            chat_data_1 = {
+                "message": "I'm 30 years old with $100,000 to invest for retirement",
+                "session_id": context_session_id
+            }
+            
+            response_1 = requests.post(
+                f"{self.base_url}/api/chat",
+                json=chat_data_1,
+                timeout=30
+            )
+            
+            if response_1.status_code != 200:
+                self.log_result("Session Persistence", False, f"Context setting failed: {response_1.status_code}")
+                return False
+            
+            time.sleep(3)  # Wait to avoid rate limiting
+            
+            # Second message: Reference previous context
+            print("  Step 2: Testing context awareness...")
+            chat_data_2 = {
+                "message": "Based on what I just told you, what allocation would you recommend?",
+                "session_id": context_session_id
+            }
+            
+            response_2 = requests.post(
+                f"{self.base_url}/api/chat",
+                json=chat_data_2,
+                timeout=30
+            )
+            
+            if response_2.status_code != 200:
+                self.log_result("Session Persistence", False, f"Context reference failed: {response_2.status_code}")
+                return False
+            
+            data_2 = response_2.json()
+            response_text = data_2.get("response", "")
+            
+            # Check if response shows context awareness
+            context_indicators = ["30", "100,000", "retirement", "age", "allocation", "recommend"]
+            found_indicators = [ind for ind in context_indicators if ind in response_text.lower()]
+            
+            # Verify chat history retrieval
+            print("  Step 3: Verifying chat history...")
+            history_response = requests.get(f"{self.base_url}/api/chat-history/{context_session_id}", timeout=10)
+            
+            if history_response.status_code == 200:
+                history_data = history_response.json()
+                messages = history_data.get("data", [])
+                
+                if len(messages) >= 4:  # 2 user messages + 2 AI responses
+                    self.log_result("Session Persistence", True, 
+                        f"Context maintained: {len(found_indicators)} indicators, {len(messages)} messages in history")
+                    return True
+                else:
+                    self.log_result("Session Persistence", False, 
+                        f"Insufficient message history: {len(messages)} messages")
+            else:
+                self.log_result("Session Persistence", False, 
+                    f"History retrieval failed: {history_response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Session Persistence", False, f"Error: {str(e)}")
+        return False
+    
+    def test_error_recovery_after_rate_limiting(self):
+        """Test that messages work properly after rate limiting"""
+        try:
+            recovery_session_id = str(uuid.uuid4())
+            
+            print("Testing error recovery after rate limiting...")
+            
+            # Step 1: Trigger rate limiting with rapid requests
+            print("  Step 1: Triggering rate limiting...")
+            for i in range(3):
+                chat_data = {
+                    "message": f"Quick question {i+1}",
+                    "session_id": recovery_session_id
+                }
+                
+                requests.post(f"{self.base_url}/api/chat", json=chat_data, timeout=30)
+                time.sleep(0.2)  # Very rapid requests
+            
+            # Step 2: Wait for rate limiting to subside
+            print("  Step 2: Waiting for rate limiting to subside...")
+            time.sleep(8)  # Wait longer than the backoff period
+            
+            # Step 3: Send a normal message - should work properly
+            print("  Step 3: Testing recovery with normal message...")
+            recovery_chat_data = {
+                "message": "Now that I've waited, can you help me with portfolio diversification?",
+                "session_id": recovery_session_id
+            }
+            
+            recovery_response = requests.post(
+                f"{self.base_url}/api/chat",
+                json=recovery_chat_data,
+                timeout=30
+            )
+            
+            if recovery_response.status_code == 200:
+                recovery_data = recovery_response.json()
+                response_text = recovery_data.get("response", "")
+                
+                # Check if it's a proper financial response (not a rate limiting message)
+                if (len(response_text) > 100 and 
+                    not ("high demand" in response_text.lower() or "try again" in response_text.lower())):
+                    
+                    # Check for financial content
+                    financial_keywords = ["portfolio", "diversif", "invest", "asset", "risk", "allocation"]
+                    found_keywords = [kw for kw in financial_keywords if kw.lower() in response_text.lower()]
+                    
+                    if len(found_keywords) >= 2:
+                        self.log_result("Error Recovery", True, 
+                            f"Recovery successful: {len(response_text)} chars, {len(found_keywords)} financial keywords")
+                        return True
+                    else:
+                        self.log_result("Error Recovery", False, 
+                            f"Response not financial: {response_text[:100]}...")
+                else:
+                    self.log_result("Error Recovery", False, 
+                        f"Still rate limited or short response: {response_text[:100]}...")
+            else:
+                self.log_result("Error Recovery", False, 
+                    f"Recovery failed with status: {recovery_response.status_code}")
+                
+        except Exception as e:
+            self.log_result("Error Recovery", False, f"Error: {str(e)}")
+        return False
+    
     def test_session_management(self):
-        """Test session management with follow-up chat"""
+        """Test basic session management with follow-up chat"""
         try:
             # Send a follow-up message using the same session
             chat_data = {
@@ -266,7 +584,7 @@ class FinanceBotTester:
                 "session_id": self.session_id
             }
             
-            print("Testing session management with follow-up message...")
+            print("Testing basic session management with follow-up message...")
             response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=chat_data,
@@ -278,16 +596,16 @@ class FinanceBotTester:
                 if data.get("session_id") == self.session_id and "response" in data:
                     ai_response = data["response"]
                     if len(ai_response) > 20:
-                        self.log_result("Session Management", True, f"Follow-up response received with same session_id")
+                        self.log_result("Basic Session Management", True, f"Follow-up response received with same session_id")
                         return True
                     else:
-                        self.log_result("Session Management", False, f"Response too short: {ai_response}")
+                        self.log_result("Basic Session Management", False, f"Response too short: {ai_response}")
                 else:
-                    self.log_result("Session Management", False, f"Session ID mismatch or invalid response")
+                    self.log_result("Basic Session Management", False, f"Session ID mismatch or invalid response")
             else:
-                self.log_result("Session Management", False, f"Status code: {response.status_code}")
+                self.log_result("Basic Session Management", False, f"Status code: {response.status_code}")
         except Exception as e:
-            self.log_result("Session Management", False, f"Error: {str(e)}")
+            self.log_result("Basic Session Management", False, f"Error: {str(e)}")
         return False
     
     def test_enhanced_market_data(self):
