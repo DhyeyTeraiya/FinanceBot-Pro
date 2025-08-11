@@ -179,6 +179,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Chat history persistence working correctly. Messages saved to MongoDB and retrievable via /api/chat-history/{session_id}. Both user and AI messages stored with timestamps."
+      - working: true
+        agent: "testing"
+        comment: "VERIFIED: Chat history persistence confirmed working. Successfully retrieved 2 messages from previous session (user question and AI response). Session management functioning correctly with proper message storage and retrieval."
 
   - task: "Session Management"
     implemented: true
