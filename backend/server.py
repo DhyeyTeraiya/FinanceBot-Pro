@@ -332,18 +332,21 @@ Always provide practical, actionable advice tailored to the user's situation. Be
         # Add current message
         messages.append({"role": "user", "content": chat_request.message})
         
-        # Call NVIDIA API with Llama 3.3 Nemotron model
+        # Call NVIDIA API with Palmyra financial model and streaming
         completion = openai_client.chat.completions.create(
-            model="nvidia/llama-3.3-nemotron-super-49b-v1.5",
+            model="writer/palmyra-fin-70b-32k",
             messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            max_tokens=65536,
-            frequency_penalty=0,
-            presence_penalty=0
+            temperature=0.2,
+            top_p=0.7,
+            max_tokens=1024,
+            stream=True
         )
         
-        response_text = completion.choices[0].message.content
+        # Collect streaming response
+        response_text = ""
+        for chunk in completion:
+            if chunk.choices[0].delta.content is not None:
+                response_text += chunk.choices[0].delta.content
         
         # Save conversation to database
         await db.chat_history.insert_many([
