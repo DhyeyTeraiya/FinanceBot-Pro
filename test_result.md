@@ -236,6 +236,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "Fixed by adding 'openai>=1.0.0' to requirements.txt and restarting backend service. Backend now starts successfully."
+      - working: true
+        agent: "testing"
+        comment: "ADDITIONAL FIX: Found and resolved missing 'httpx>=0.24.0' dependency required by openai package. Backend now starts without errors and all AI functionality working properly."
 
 metadata:
   created_by: "testing_agent"
