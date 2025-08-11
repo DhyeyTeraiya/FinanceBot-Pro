@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Test the updated FinanceBot Pro with the new Llama 3.3 Nemotron Super 49B model: API Health Check, New AI Model Test with advanced reasoning capabilities, Session Management, and Response Quality verification"
+user_problem_statement: "Clone website https://smart-invest-ai-4.preview.emergentagent.com/ and fix chatbot issues where it responds with 'think>' instead of proper responses when sending 'hi'. User provided NVIDIA API configuration using Palmyra financial model."
 
 backend:
   - task: "API Health Check"
