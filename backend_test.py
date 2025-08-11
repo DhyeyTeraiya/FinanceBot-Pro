@@ -890,7 +890,7 @@ class FinanceBotTester:
         print("FINANCEBOT PRO BACKEND API TESTING")
         print("=" * 60)
         
-        # Test in logical order
+        # Test in logical order - CRITICAL multi-message tests first
         tests = [
             ("Health Check", self.test_health_check),
             ("Market Data", self.test_market_data),
@@ -906,7 +906,12 @@ class FinanceBotTester:
             ("Portfolio Analysis", self.test_portfolio_analysis),
             ("AI Chat Functionality", self.test_ai_chat_functionality),
             ("Chat History Persistence", self.test_chat_history_persistence),
-            ("Session Management", self.test_session_management),
+            ("Basic Session Management", self.test_session_management),
+            # CRITICAL MULTI-MESSAGE SESSION TESTS
+            ("🔥 CRITICAL: Multi-Message Conversation", self.test_multi_message_conversation),
+            ("Rate Limiting Resilience", self.test_rate_limiting_resilience),
+            ("Session Persistence & Context", self.test_session_persistence_and_context),
+            ("Error Recovery After Rate Limiting", self.test_error_recovery_after_rate_limiting),
         ]
         
         for test_name, test_func in tests:
