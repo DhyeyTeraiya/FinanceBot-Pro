@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import openai
 import os
 import asyncio
@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.optimize import minimize
 import yfinance as yf
 import json
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +39,7 @@ db = client.financebot_pro
 # Initialize OpenAI client for NVIDIA API
 openai_client = openai.OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key=os.environ.get('NVIDIA_API_KEY', "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")
 )
 
 # Pydantic models
@@ -79,6 +80,12 @@ class OptimizationResult(BaseModel):
     allocation: Dict[str, float]
     efficient_frontier: Optional[List[Dict]] = None
 
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
+    status_code: int
+    timestamp: str
+
 # Portfolio Optimization Engine
 class PortfolioOptimizer:
     def __init__(self):
@@ -93,17 +100,20 @@ class PortfolioOptimizer:
             return data.dropna()
         except Exception as e:
             logger.error(f"Error fetching data: {str(e)}")
-            # Return mock data if yfinance fails
-            dates = pd.date_range(end=datetime.now(), periods=252, freq='D')
-            np.random.seed(42)
-            mock_data = {}
-            for symbol in symbols:
-                returns = np.random.normal(0.001, 0.02, 252)
-                prices = [100]
-                for ret in returns[1:]:
-                    prices.append(prices[-1] * (1 + ret))
-                mock_data[symbol] = prices
-            return pd.DataFrame(mock_data, index=dates)
+            return self._generate_mock_data(symbols)
+    
+    def _generate_mock_data(self, symbols: List[str]) -> pd.DataFrame:
+        """Generate mock historical data for testing purposes"""
+        dates = pd.date_range(end=datetime.now(), periods=252, freq='D')
+        np.random.seed(42)
+        mock_data = {}
+        for symbol in symbols:
+            returns = np.random.normal(0.001, 0.02, 252)
+            prices = [100]
+            for ret in returns[1:]:
+                prices.append(prices[-1] * (1 + ret))
+            mock_data[symbol] = prices
+        return pd.DataFrame(mock_data, index=dates)
     
     def calculate_returns_and_cov(self, price_data: pd.DataFrame):
         """Calculate expected returns and covariance matrix"""
@@ -198,8 +208,8 @@ class PortfolioOptimizer:
         except Exception as e:
             logger.error(f"Portfolio optimization error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Optimization error: {str(e)}")
-    
-    def generate_efficient_frontier(self, symbols: List[str], num_portfolios: int = 10):
+
+    def generate_efficient_frontier(self, symbols: List[str], num_portfolios: int = 10) -> List[Dict[str, float]]:
         """Generate efficient frontier data points"""
         try:
             price_data = self.get_historical_data(symbols)
@@ -278,25 +288,40 @@ class PortfolioOptimizer:
 # Initialize optimizer
 optimizer = PortfolioOptimizer()
 
-# Enhanced mock market data with more realistic financial data
-ENHANCED_MARKET_DATA = {
-    "AAPL": {"price": 195.30, "change": "+2.45", "change_percent": "+1.27%", "beta": 1.29, "pe_ratio": 32.4},
-    "GOOGL": {"price": 2875.20, "change": "-15.30", "change_percent": "-0.53%", "beta": 1.03, "pe_ratio": 28.1},
-    "MSFT": {"price": 415.75, "change": "+3.20", "change_percent": "+0.78%", "beta": 0.91, "pe_ratio": 35.2},
-    "TSLA": {"price": 242.65, "change": "+8.40", "change_percent": "+3.58%", "beta": 2.09, "pe_ratio": 76.8},
-    "NVDA": {"price": 925.40, "change": "+12.80", "change_percent": "+1.40%", "beta": 1.65, "pe_ratio": 45.3},
-    "AMZN": {"price": 3485.75, "change": "-8.25", "change_percent": "-0.24%", "beta": 1.33, "pe_ratio": 52.7},
-    "META": {"price": 485.20, "change": "+6.10", "change_percent": "+1.27%", "beta": 1.18, "pe_ratio": 24.9},
-    "SPY": {"price": 478.32, "change": "+1.85", "change_percent": "+0.39%", "beta": 1.00, "pe_ratio": 26.2},
-    "QQQ": {"price": 425.88, "change": "+2.12", "change_percent": "+0.50%", "beta": 1.15, "pe_ratio": 30.1},
-    "VTI": {"price": 285.94, "change": "+1.44", "change_percent": "+0.51%", "beta": 1.02, "pe_ratio": 25.8},
-    "BTC": {"price": 67420.30, "change": "+1240.80", "change_percent": "+1.87%", "beta": 3.50, "pe_ratio": None},
-    "ETH": {"price": 3825.40, "change": "+95.20", "change_percent": "+2.55%", "beta": 2.80, "pe_ratio": None}
-}
+def get_enhanced_market_data() -> Dict[str, Dict[str, Any]]:
+    """Get enhanced market data with realistic financial metrics"""
+    return {
+        "AAPL": {"price": 195.30, "change": "+2.45", "change_percent": "+1.27%", "beta": 1.29, "pe_ratio": 32.4, "volume": 45234567},
+        "GOOGL": {"price": 2875.20, "change": "-15.30", "change_percent": "-0.53%", "beta": 1.03, "pe_ratio": 28.1, "volume": 1234567},
+        "MSFT": {"price": 415.75, "change": "+3.20", "change_percent": "+0.78%", "beta": 0.91, "pe_ratio": 35.2, "volume": 23456789},
+        "TSLA": {"price": 242.65, "change": "+8.40", "change_percent": "+3.58%", "beta": 2.09, "pe_ratio": 76.8, "volume": 67890123},
+        "NVDA": {"price": 925.40, "change": "+12.80", "change_percent": "+1.40%", "beta": 1.65, "pe_ratio": 45.3, "volume": 34567890},
+        "AMZN": {"price": 3485.75, "change": "-8.25", "change_percent": "-0.24%", "beta": 1.33, "pe_ratio": 52.7, "volume": 12345678},
+        "META": {"price": 485.20, "change": "+6.10", "change_percent": "+1.27%", "beta": 1.18, "pe_ratio": 24.9, "volume": 23456789},
+        "SPY": {"price": 478.32, "change": "+1.85", "change_percent": "+0.39%", "beta": 1.00, "pe_ratio": 26.2, "volume": 89012345},
+        "QQQ": {"price": 425.88, "change": "+2.12", "change_percent": "+0.50%", "beta": 1.15, "pe_ratio": 30.1, "volume": 45678901},
+        "VTI": {"price": 285.94, "change": "+1.44", "change_percent": "+0.51%", "beta": 1.02, "pe_ratio": 25.8, "volume": 12345678},
+        "BTC": {"price": 67420.30, "change": "+1240.80", "change_percent": "+1.87%", "beta": 3.50, "pe_ratio": None, "volume": 234567890},
+        "ETH": {"price": 3825.40, "change": "+95.20", "change_percent": "+2.55%", "beta": 2.80, "pe_ratio": None, "volume": 123456789}
+    }
+
+def create_error_response(error_type: str, message: str, status_code: int) -> Dict[str, Any]:
+    """Create standardized error response"""
+    return {
+        "error": error_type,
+        "message": message,
+        "status_code": status_code,
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 @app.get("/")
 async def root():
-    return {"message": "FinanceBot Pro API is running"}
+    return {
+        "message": "FinanceBot Pro API is running",
+        "version": "1.0.0",
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_with_advisor(chat_request: ChatMessage):
@@ -312,7 +337,9 @@ async def chat_with_advisor(chat_request: ChatMessage):
         messages = [
             {
                 "role": "system", 
-                "content": """You are FinanceBot Pro, an expert AI financial advisor. You provide personalized investment advice, portfolio recommendations, and financial planning guidance. You have deep knowledge of:
+                "content": """You are FinanceBot Pro, an expert AI financial advisor powered by advanced AI technology. You provide personalized investment advice, portfolio recommendations, and financial planning guidance.
+
+Your expertise includes:
 
 - Investment strategies and portfolio optimization
 - Risk management and asset allocation
@@ -320,8 +347,16 @@ async def chat_with_advisor(chat_request: ChatMessage):
 - Tax-efficient investing
 - Retirement planning and wealth building
 - Various asset classes (stocks, bonds, ETFs, crypto, etc.)
+- Tax-efficient investing strategies
+- Market analysis and economic trends
 
-Always provide practical, actionable advice tailored to the user's situation. Be professional yet approachable. If asked about specific stocks or investments, provide balanced analysis considering both opportunities and risks."""
+Guidelines for responses:
+- Always provide practical, actionable advice tailored to the user's situation
+- Be professional yet approachable and conversational
+- Provide balanced analysis considering both opportunities and risks
+- Structure your responses clearly with bullet points or numbered lists when appropriate
+- Include relevant disclaimers about investment risks when giving specific advice
+- Ask clarifying questions when you need more information about the user's situation"""
             }
         ]
         
@@ -342,9 +377,9 @@ Always provide practical, actionable advice tailored to the user's situation. Be
                 completion = openai_client.chat.completions.create(
                     model="writer/palmyra-fin-70b-32k",
                     messages=messages,
-                    temperature=0.2,
-                    top_p=0.7,
-                    max_tokens=1024,
+                    temperature=0.3,
+                    top_p=0.8,
+                    max_tokens=2048,
                     stream=True
                 )
                 
@@ -362,7 +397,7 @@ Always provide practical, actionable advice tailored to the user's situation. Be
                     
             except Exception as api_error:
                 error_str = str(api_error)
-                logger.warning(f"Chat API attempt {attempt + 1} failed: {error_str}")
+                logger.warning(f"Chat API attempt {attempt + 1}/{max_retries + 1} failed: {error_str}")
                 
                 # Check if it's a rate limiting error
                 if "429" in error_str or "Too Many Requests" in error_str or "rate" in error_str.lower():
@@ -374,7 +409,7 @@ Always provide practical, actionable advice tailored to the user's situation. Be
                         continue
                     else:
                         # Max retries exceeded for rate limiting
-                        response_text = "I'm experiencing high demand right now. Please try again in a few moments. In the meantime, you can explore the dashboard or ask me about general investment strategies."
+                        response_text = "I'm experiencing high demand right now due to many users seeking financial advice. Please try again in a few moments. In the meantime, you can explore the dashboard or ask me about general investment strategies."
                         break
                 else:
                     # Non-rate-limiting error, don't retry
@@ -382,35 +417,39 @@ Always provide practical, actionable advice tailored to the user's situation. Be
                         await asyncio.sleep(1)
                         continue
                     else:
-                        response_text = "I apologize, but I'm having trouble processing your request right now. Please try again, and I'll do my best to help with your financial questions."
+                        response_text = "I apologize, but I'm experiencing technical difficulties processing your request. Please try again in a moment, and I'll do my best to help with your financial questions and investment guidance."
                         break
         
         # Ensure we have some response
         if not response_text or not response_text.strip():
-            response_text = "Hello! I'm FinanceBot Pro, your AI financial advisor. How can I help you with your investment goals today?"
+            response_text = "Hello! I'm FinanceBot Pro, your AI financial advisor powered by advanced financial AI. I'm here to help you with investment strategies, portfolio optimization, risk management, and financial planning. What would you like to discuss about your financial goals today?"
         
         # Save conversation to database
-        await db.chat_history.insert_many([
-            {
-                "session_id": session_id,
-                "role": "user",
-                "content": chat_request.message,
-                "timestamp": datetime.utcnow()
-            },
-            {
-                "session_id": session_id,
-                "role": "assistant", 
-                "content": response_text,
-                "timestamp": datetime.utcnow()
-            }
-        ])
+        try:
+            await db.chat_history.insert_many([
+                {
+                    "session_id": session_id,
+                    "role": "user",
+                    "content": chat_request.message,
+                    "timestamp": datetime.utcnow()
+                },
+                {
+                    "session_id": session_id,
+                    "role": "assistant", 
+                    "content": response_text,
+                    "timestamp": datetime.utcnow()
+                }
+            ])
+        except Exception as db_error:
+            logger.error(f"Database save error: {str(db_error)}")
+            # Continue with response even if DB save fails
         
         return ChatResponse(response=response_text, session_id=session_id)
         
     except Exception as e:
-        logger.error(f"Chat error: {str(e)}")
+        logger.error(f"Chat error: {str(e)}\n{traceback.format_exc()}")
         # Provide user-friendly error message instead of raising HTTP exception
-        fallback_response = "I'm experiencing some technical difficulties. Please try your question again, and I'll help you with your financial planning needs."
+        fallback_response = "I'm experiencing some technical difficulties at the moment. Please try your question again, and I'll be happy to help you with your financial planning and investment needs."
         
         # Still try to save the user message to maintain session continuity
         try:
@@ -437,18 +476,37 @@ Always provide practical, actionable advice tailored to the user's situation. Be
 @app.get("/api/market-data")
 async def get_market_data():
     try:
-        return {"status": "success", "data": ENHANCED_MARKET_DATA}
+        market_data = get_enhanced_market_data()
+        return {
+            "status": "success", 
+            "data": market_data,
+            "timestamp": datetime.utcnow().isoformat(),
+            "count": len(market_data)
+        }
     except Exception as e:
         logger.error(f"Market data error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Market data service error")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("MARKET_DATA_ERROR", "Market data service temporarily unavailable", 500)
+        )
 
 @app.get("/api/market-data/enhanced")
 async def get_enhanced_market_data():
     try:
-        return {"status": "success", "data": ENHANCED_MARKET_DATA}
+        market_data = get_enhanced_market_data()
+        return {
+            "status": "success", 
+            "data": market_data,
+            "timestamp": datetime.utcnow().isoformat(),
+            "count": len(market_data),
+            "features": ["price", "change", "change_percent", "beta", "pe_ratio", "volume"]
+        }
     except Exception as e:
         logger.error(f"Enhanced market data error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Enhanced market data service error")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("ENHANCED_MARKET_DATA_ERROR", "Enhanced market data service temporarily unavailable", 500)
+        )
 
 @app.post("/api/optimize-portfolio", response_model=OptimizationResult)
 async def optimize_portfolio(request: OptimizationRequest):
@@ -479,7 +537,10 @@ async def optimize_portfolio(request: OptimizationRequest):
         
     except Exception as e:
         logger.error(f"Portfolio optimization error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Portfolio optimization failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("OPTIMIZATION_ERROR", f"Portfolio optimization failed: {str(e)}", 500)
+        )
 
 @app.get("/api/efficient-frontier/{symbols}")
 async def get_efficient_frontier(symbols: str):
@@ -489,11 +550,19 @@ async def get_efficient_frontier(symbols: str):
             raise HTTPException(status_code=400, detail="At least 2 symbols required for optimization")
         
         efficient_frontier = optimizer.generate_efficient_frontier(symbol_list)
-        return {"status": "success", "data": efficient_frontier}
+        return {
+            "status": "success", 
+            "data": efficient_frontier,
+            "symbols": symbol_list,
+            "count": len(efficient_frontier)
+        }
         
     except Exception as e:
         logger.error(f"Efficient frontier error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Efficient frontier calculation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("EFFICIENT_FRONTIER_ERROR", f"Efficient frontier calculation failed: {str(e)}", 500)
+        )
 
 @app.get("/api/portfolio-analysis/{symbols}")
 async def analyze_portfolio(symbols: str):
@@ -523,13 +592,19 @@ async def analyze_portfolio(symbols: str):
             "data": {
                 "asset_metrics": asset_metrics,
                 "correlation_matrix": correlation_matrix.to_dict(),
-                "covariance_matrix": cov_matrix.to_dict()
-            }
+                "covariance_matrix": cov_matrix.to_dict(),
+                "symbols": symbol_list,
+                "analysis_date": datetime.utcnow().isoformat()
+            },
+            "count": len(asset_metrics)
         }
         
     except Exception as e:
         logger.error(f"Portfolio analysis error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Portfolio analysis failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("PORTFOLIO_ANALYSIS_ERROR", f"Portfolio analysis failed: {str(e)}", 500)
+        )
 
 @app.post("/api/user/profile")
 async def create_user_profile(profile: UserProfile):
@@ -538,10 +613,18 @@ async def create_user_profile(profile: UserProfile):
         profile_dict["created_at"] = datetime.utcnow()
         
         await db.user_profiles.insert_one(profile_dict)
-        return {"status": "success", "message": "Profile created successfully"}
+        return {
+            "status": "success", 
+            "message": "User profile created successfully",
+            "user_id": profile.user_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
         logger.error(f"Profile creation error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Profile creation failed")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("PROFILE_CREATION_ERROR", "Profile creation failed", 500)
+        )
 
 @app.get("/api/user/profile/{user_id}")
 async def get_user_profile(user_id: str):
@@ -552,12 +635,19 @@ async def get_user_profile(user_id: str):
         
         # Remove MongoDB ObjectId for JSON serialization
         profile.pop("_id", None)
-        return {"status": "success", "data": profile}
+        return {
+            "status": "success", 
+            "data": profile,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Profile fetch error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Profile fetch failed")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("PROFILE_FETCH_ERROR", "Profile fetch failed", 500)
+        )
 
 @app.post("/api/portfolio")
 async def create_portfolio(portfolio: Portfolio):
@@ -567,10 +657,18 @@ async def create_portfolio(portfolio: Portfolio):
         portfolio_dict["updated_at"] = datetime.utcnow()
         
         await db.portfolios.insert_one(portfolio_dict)
-        return {"status": "success", "message": "Portfolio created successfully"}
+        return {
+            "status": "success", 
+            "message": "Portfolio created successfully",
+            "user_id": portfolio.user_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
         logger.error(f"Portfolio creation error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Portfolio creation failed")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("PORTFOLIO_CREATION_ERROR", "Portfolio creation failed", 500)
+        )
 
 @app.get("/api/portfolio/{user_id}")
 async def get_portfolio(user_id: str):
@@ -594,10 +692,17 @@ async def get_portfolio(user_id: str):
         
         # Remove MongoDB ObjectId for JSON serialization
         portfolio.pop("_id", None)
-        return {"status": "success", "data": portfolio}
+        return {
+            "status": "success", 
+            "data": portfolio,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
         logger.error(f"Portfolio fetch error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Portfolio fetch failed")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("PORTFOLIO_FETCH_ERROR", "Portfolio fetch failed", 500)
+        )
 
 @app.get("/api/chat-history/{session_id}")
 async def get_chat_history(session_id: str):
@@ -615,11 +720,48 @@ async def get_chat_history(session_id: str):
                 "timestamp": msg["timestamp"]
             })
         
-        return {"status": "success", "data": cleaned_messages}
+        return {
+            "status": "success", 
+            "data": cleaned_messages,
+            "count": len(cleaned_messages),
+            "session_id": session_id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
     except Exception as e:
         logger.error(f"Chat history error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Chat history fetch failed")
+        raise HTTPException(
+            status_code=500, 
+            detail=create_error_response("CHAT_HISTORY_ERROR", "Chat history fetch failed", 500)
+        )
+
+@app.get("/api/health")
+async def health_check():
+    """Comprehensive health check endpoint"""
+    try:
+        # Test database connection
+        await db.command("ping")
+        db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        db_status = "unhealthy"
+    
+    return {
+        "status": "healthy" if db_status == "healthy" else "degraded",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": "1.0.0",
+        "services": {
+            "database": db_status,
+            "ai_model": "nvidia_palmyra_fin_70b_32k",
+            "portfolio_optimizer": "active"
+        },
+        "uptime": "running"
+    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=int(os.environ.get("PORT", 8001)),
+        log_level="info"
+    )
